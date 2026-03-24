@@ -1,0 +1,31 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "Build Doom",
+            "command": "g++", 
+            "args": [
+                "-g",
+                "-std=c++17",
+                "-I${workspaceFolder}\\include",
+                "${workspaceFolder}\\src\\glad.c",
+                "${workspaceFolder}\\src\\*.cpp",
+                "-L${workspaceFolder}\\lib",
+                "-lglfw3",
+                "-lopengl32",
+                "-lgdi32", 
+                "-o",
+                "${workspaceFolder}\\app.exe"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": ["$gcc"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
