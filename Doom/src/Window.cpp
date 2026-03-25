@@ -11,13 +11,16 @@
 #include "Camera.h"
 #include "Floor.h"
 #include "Walls.h"
-
+#include "Skybox.h"
+#include "Shader.h" // <-- Add this here!
+#include <vector>
+#include <string>
 // Settings
 const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 720;
 
 // Camera Globals
-glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f, 3.0f);
+glm::vec3 cameraPos   = glm::vec3(2.0f, 0.0f, -2.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
@@ -28,29 +31,10 @@ float lastX = 400, lastY = 300;
 float yaw   = -90.0f; 
 float pitch =  0.0f;
 bool firstMouse = true;
+float verticalVelocity = 0.0f;
+ Camera camera;
+ Walls walls;
 
-// Shaders 
-const char *vertexShaderSource = "#version 330 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "layout (location = 1) in vec2 aTexCoord;\n"
-    "out vec2 TexCoord;\n"
-    "uniform mat4 model;\n"
-    "uniform mat4 view;\n"
-    "uniform mat4 projection;\n"
-    "void main()\n"
-    "{\n"
-    "   gl_Position = projection * view * vec4(aPos, 1.0);\n"
-    "   TexCoord = aTexCoord;\n"
-    "}\0";
-
-const char *fragmentShaderSource = "#version 330 core\n"
-    "out vec4 FragColor;\n"
-    "in vec2 TexCoord;\n"
-    "uniform sampler2D wallTexture;\n"
-    "void main()\n"
-    "{\n"
-    "   FragColor = texture(wallTexture, TexCoord);\n"
-    "}\0";
 
 void process_input(GLFWwindow* window);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -77,36 +61,32 @@ int main()
 
     // Enable Depth Testing so the wall renders in front of the floor
     glEnable(GL_DEPTH_TEST);
+    Shader pbrShader("src/pbr.vert", "src/pbr.frag");
+    Shader skyboxShader("src/skybox.vert", "src/skybox.frag");
 
-    // Build Shaders
-    unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-
-    unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-
-    unsigned int shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-   
-    Walls walls;
     walls.setupWalls();
-    // Setup Floor
     Floor floor;
     floor.floorBuffers();
-    // Load Textures
-    unsigned int wallTex = loadTexture("wall.jpg");
-    unsigned int floorTex = loadTexture("floor.jpg");   
 
-    glUseProgram(shaderProgram);
-    glUniform1i(glGetUniformLocation(shaderProgram, "wallTexture"), 0);
+    unsigned int wallTex  = loadTexture("wall.jpg");
+    unsigned int floorTex = loadTexture("floor.jpg");
 
+    // ✅ Use pbrShader.use() instead of glUseProgram(shaderProgram)
+    pbrShader.use();
+    pbrShader.setInt("wallTexture", 0);
+
+    Skybox skybox;
+    std::vector<std::string> faces = {
+        "right.jpg", "left.jpg", "top.jpg",
+        "bottom.jpg", "front.jpg", "back.jpg"
+    };
+    skybox.setupSkybox(faces);
+
+    skyboxShader.use();
+    skyboxShader.setInt("skybox", 1);
+
+    
+    glEnable(GL_DEPTH_TEST);
     // Render Loop
     while (!glfwWindowShouldClose(window))
     {
@@ -116,49 +96,62 @@ int main()
 
         process_input(window);
         
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        // Added GL_DEPTH_BUFFER_BIT here!
+        // ... (inside the while loop) ...
+           glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glUseProgram(shaderProgram);
+        // ✅ PBR pass
+        pbrShader.use();
+        pbrShader.setVec3("viewPos", cameraPos);
+        pbrShader.setVec3("sunColor", glm::vec3(1.0f, 0.95f, 0.9f));
 
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-        
+        float time = glfwGetTime();
+        glm::vec3 sunDir = glm::normalize(glm::vec3(sin(time * 0.5f), 1.0f, cos(time * 0.5f)));
+        pbrShader.setVec3("sunDir", sunDir);
+
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f),
+            (float)SCR_WIDTH / SCR_HEIGHT, 0.1f, 100.0f);
         glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
 
-        glActiveTexture(GL_TEXTURE0); 
+        pbrShader.setMat4("projection", projection);
+        pbrShader.setMat4("view", view);
 
-        // --- 2. Draw the Floor ---
-        // Give the floor a default model matrix (identity)
-        glm::mat4 model = glm::mat4(1.0f);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
-
-        glBindTexture(GL_TEXTURE_2D, floorTex); 
-        glBindVertexArray(floor.floorVAO); 
+        // Draw floor
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, floorTex);
+        glBindVertexArray(floor.floorVAO);
+        pbrShader.setMat4("model", glm::mat4(1.0f));
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        // --- 3. Draw the Walls ---
-        glBindTexture(GL_TEXTURE_2D, wallTex); 
+        // Draw walls
+        glBindTexture(GL_TEXTURE_2D, wallTex);
         glBindVertexArray(walls.wallVAO);
+        float blockSize = 2.0f;
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 10; j++) {
+                if (walls.MAP[i][j] == 1) {
+                    glm::mat4 model = glm::mat4(1.0f);
+                    model = glm::translate(model, glm::vec3(i * blockSize, 0.0f, -(j * blockSize)));
+                    model = glm::scale(model, glm::vec3(blockSize, blockSize, blockSize));
+                    pbrShader.setMat4("model", model);
+                    glDrawArrays(GL_TRIANGLES, 0, 36);
+                }
+            }
+        }
 
-        // Wall 1: Directly in front of the origin
-        model = glm::mat4(1.0f);
-        model = glm::mat4(1.0f);
-        // Translate up by 0.5f on the Y axis to rest on the floor
-        model = glm::translate(model, glm::vec3(0.0f, 0.5f, -2.0f)); 
-        model = glm::scale(model, glm::vec3(4.0f, 2.0f, 1.0f));     // Make it wider and taller
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        // ✅ Skybox pass
+        glDepthFunc(GL_LEQUAL);
+        skyboxShader.use();
+        glm::mat4 skyboxView = glm::mat4(glm::mat3(view)); // strip translation
+        skyboxShader.setMat4("view", skyboxView);
+        skyboxShader.setMat4("projection", projection);
 
-        // Wall 2: To the left
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(-2.0f, 0.0f, 0.0f)); // Move left
-        model = glm::rotate(model, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate 90 degrees
-        model = glm::scale(model, glm::vec3(4.0f, 2.0f, 1.0f));
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glActiveTexture(GL_TEXTURE1);
+        glBindVertexArray(skybox.skyboxVAO);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skybox.cubemapTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
+        glDepthFunc(GL_LESS);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -173,18 +166,65 @@ void process_input(GLFWwindow* window) {
         glfwSetWindowShouldClose(window, true);
 
     float cameraSpeed = 2.5f * deltaTime; 
+    glm::vec3 velocity(0.0f);
+    if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+        cameraSpeed *= 2.0f;
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos += cameraSpeed * cameraFront;
+        velocity += cameraSpeed * cameraFront;
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos -= cameraSpeed * cameraFront;
+        velocity -= cameraSpeed * cameraFront;
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        velocity -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        cameraPos += cameraUp * cameraSpeed;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-        cameraPos -= cameraUp * cameraSpeed;
+        velocity += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+    
+
+   float gravity = -25.0f; 
+    float jumpForce = 4.0f; 
+
+    verticalVelocity += gravity * deltaTime;
+
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && cameraPos.y <= 0.0f) {
+        verticalVelocity = jumpForce;
+    }
+
+    cameraPos.y += verticalVelocity * deltaTime;
+
+    if (cameraPos.y <= 0.0f) {
+        cameraPos.y = 0.0f;
+        verticalVelocity = 0.0f; 
+    }
+
+
+    cameraPos.x += velocity.x;
+    if(walls.checkCollision(cameraPos)){
+        cameraPos.x -= velocity.x;
+    }
+    cameraPos.z += velocity.z;
+    if(walls.checkCollision(cameraPos)){
+        cameraPos.z -= velocity.z;
+    }
+    static bool f11PressedLastFrame = false;
+    static bool isFullscreen = false;
+    static int winPosX, winPosY, winWidth, winHeight; 
+
+    bool f11Pressed = glfwGetKey(window, GLFW_KEY_F11) == GLFW_PRESS;
+    
+    if (f11Pressed && !f11PressedLastFrame) {
+        isFullscreen = !isFullscreen;
+
+        if (isFullscreen) {
+            glfwGetWindowPos(window, &winPosX, &winPosY);
+            glfwGetWindowSize(window, &winWidth, &winHeight);
+            GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+            const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+            glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+        } else {
+            glfwSetWindowMonitor(window, nullptr, winPosX, winPosY, winWidth, winHeight, 0);
+        }
+    }
+    
+    f11PressedLastFrame = f11Pressed;
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)

@@ -8,13 +8,20 @@
             "args": [
                 "-g",
                 "-std=c++17",
+                // Includes
                 "-I${workspaceFolder}\\include",
+                "-IC:\\msys64\\mingw64\\include",        // ✅ assimp headers
+                // Source files
                 "${workspaceFolder}\\src\\glad.c",
                 "${workspaceFolder}\\src\\*.cpp",
+                // Library directories
                 "-L${workspaceFolder}\\lib",
+                "-LC:\\msys64\\mingw64\\lib",            // ✅ assimp lib dir
+                // Libraries
                 "-lglfw3",
                 "-lopengl32",
-                "-lgdi32", 
+                "-lgdi32",
+                "-lassimp",                             // ✅ links libassimp.dll.a
                 "-o",
                 "${workspaceFolder}\\app.exe"
             ],

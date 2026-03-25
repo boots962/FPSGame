@@ -14,5 +14,9 @@ public:
         return glm::lookAt(glm::vec3(camX, 0.0f, camZ), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     }
 
+    bool isGrounded(glm::vec3 position) {
+        return position.y <= 0.0f; // Assuming the ground is at y = 0
+    }
+
 };
 
