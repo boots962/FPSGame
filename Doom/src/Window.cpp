@@ -6,25 +6,22 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <cmath>
 #include <stb/stb_image.h>
-// Now we can safely include your headers
+
 #include "Texture.h"
 #include "Camera.h"
 #include "Floor.h"
 #include "Walls.h"
 #include "Skybox.h"
-#include "Shader.h" // <-- Add this here!
+#include "Shader.h" 
 #include <vector>
 #include <string>
-// Settings
 const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 720;
 
-// Camera Globals
 glm::vec3 cameraPos   = glm::vec3(2.0f, 0.0f, -2.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
-// Timing Globals
 float deltaTime = 0.0f; 
 float lastFrame = 0.0f;
 float lastX = 400, lastY = 300;
@@ -59,7 +56,6 @@ int main()
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) return -1;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); 
 
-    // Enable Depth Testing so the wall renders in front of the floor
     glEnable(GL_DEPTH_TEST);
     Shader pbrShader("src/pbr.vert", "src/pbr.frag");
     Shader skyboxShader("src/skybox.vert", "src/skybox.frag");
@@ -71,7 +67,6 @@ int main()
     unsigned int wallTex  = loadTexture("wall.jpg");
     unsigned int floorTex = loadTexture("floor.jpg");
 
-    // ✅ Use pbrShader.use() instead of glUseProgram(shaderProgram)
     pbrShader.use();
     pbrShader.setInt("wallTexture", 0);
 
@@ -96,11 +91,9 @@ int main()
 
         process_input(window);
         
-        // ... (inside the while loop) ...
            glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // ✅ PBR pass
         pbrShader.use();
         pbrShader.setVec3("viewPos", cameraPos);
         pbrShader.setVec3("sunColor", glm::vec3(1.0f, 0.95f, 0.9f));
@@ -139,7 +132,6 @@ int main()
             }
         }
 
-        // ✅ Skybox pass
         glDepthFunc(GL_LEQUAL);
         skyboxShader.use();
         glm::mat4 skyboxView = glm::mat4(glm::mat3(view)); // strip translation

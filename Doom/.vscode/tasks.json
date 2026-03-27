@@ -10,18 +10,18 @@
                 "-std=c++17",
                 // Includes
                 "-I${workspaceFolder}\\include",
-                "-IC:\\msys64\\mingw64\\include",        // ✅ assimp headers
+                "-IC:\\msys64\\mingw64\\include",  
+                "-IC:\\msys64\\ucrt64\\include",     
                 // Source files
                 "${workspaceFolder}\\src\\glad.c",
                 "${workspaceFolder}\\src\\*.cpp",
                 // Library directories
                 "-L${workspaceFolder}\\lib",
-                "-LC:\\msys64\\mingw64\\lib",            // ✅ assimp lib dir
+                "-LC:\\msys64\\mingw64\\lib",            
                 // Libraries
                 "-lglfw3",
                 "-lopengl32",
-                "-lgdi32",
-                "-lassimp",                             // ✅ links libassimp.dll.a
+                "-lgdi32",                  
                 "-o",
                 "${workspaceFolder}\\app.exe"
             ],
